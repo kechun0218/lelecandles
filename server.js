@@ -22,10 +22,12 @@ const orderSchema = new mongoose.Schema({
     customer: {
         name: String,
         phone: String,
-        address: String
+        address: String,
+        email: String // ★ 新增 Email
     },
     items: Array,
     total: String,
+    remarks: String, // ★ 新增 備註
     status: {
         paid: { type: Boolean, default: false },
         produced: { type: Boolean, default: false },
