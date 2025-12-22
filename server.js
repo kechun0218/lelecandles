@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ★ 設定：請將此網址改為您 Vercel 前端的網址，付款完成後會導回這裡
-const FRONTEND_URL = "https://lele-candles.vercel.app"; 
+const FRONTEND_URL = "https://lelecandles-web.vercel.app/"; 
 // ★ 設定：後端網址 (Render 的網址)，用於接收藍新通知
 const BACKEND_URL = "https://lelecandles.onrender.com"; 
 
