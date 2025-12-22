@@ -198,12 +198,25 @@ app.post('/api/payment/notify', async (req, res) => {
 });
 
 // ★ 6. 接收藍新 Return (使用者瀏覽器導回)
-// 使用者付款完會被轉址到這裡，我們再轉回前端頁面
 app.post('/api/payment/return', async (req, res) => {
-    // 通常這裡也要解密確認狀態，但最重要的是把使用者導回前台
-    // 這裡直接導回首頁或感謝頁面
-    res.redirect(`${FRONTEND_URL}?payment=success`); 
-    // 您可以在前端偵測網址參數 ?payment=success 來跳出「付款成功」的 Alert
+    try {
+        const { TradeInfo } = req.body;
+        // 先解密，為了取得訂單編號
+        const data = createMpgAesDecrypt(TradeInfo);
+        
+        // 取得訂單編號 (MerchantOrderNo)
+        const orderId = data.Result.MerchantOrderNo;
+        
+        console.log(`Client returned for Order: ${orderId}`);
+
+        // ★ 將訂單編號加在網址參數後面 (?payment=success&order_id=ORD_xxxx)
+        res.redirect(`${FRONTEND_URL}?payment=success&order_id=${orderId}`);
+        
+    } catch (err) {
+        console.error('Return Error:', err);
+        // 如果解密失敗，還是導回首頁，但不帶參數
+        res.redirect(FRONTEND_URL);
+    }
 });
 
 
