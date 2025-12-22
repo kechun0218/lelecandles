@@ -204,21 +204,27 @@ app.post('/api/payment/notify', async (req, res) => {
 app.post('/api/payment/return', async (req, res) => {
     try {
         const { TradeInfo } = req.body;
-        // 先解密，為了取得訂單編號
+        // 解密交易內容
         const data = createMpgAesDecrypt(TradeInfo);
         
-        // 取得訂單編號 (MerchantOrderNo)
+        console.log('Return Data:', data); // 建議保留 log 以便除錯
+
         const orderId = data.Result.MerchantOrderNo;
         
-        console.log(`Client returned for Order: ${orderId}`);
-
-        // ★ 將訂單編號加在網址參數後面 (?payment=success&order_id=ORD_xxxx)
-        res.redirect(`${FRONTEND_URL}?payment=success&order_id=${orderId}`);
+        // ★★★ 關鍵修改：判斷交易狀態 ★★★
+        if (data.Status === 'SUCCESS') {
+            // 成功：導向成功參數
+            res.redirect(`${FRONTEND_URL}?payment=success&order_id=${orderId}`);
+        } else {
+            // 失敗：導向失敗參數，並將錯誤訊息 (Message) 編碼後帶回
+            // data.Message 通常包含 "末三碼格式錯誤" 等具體原因
+            const errorMsg = encodeURIComponent(data.Message || '交易失敗');
+            res.redirect(`${FRONTEND_URL}?payment=fail&order_id=${orderId}&msg=${errorMsg}`);
+        }
         
     } catch (err) {
         console.error('Return Error:', err);
-        // 如果解密失敗，還是導回首頁，但不帶參數
-        res.redirect(FRONTEND_URL);
+        res.redirect(`${FRONTEND_URL}?payment=error`); // 發生程式錯誤
     }
 });
 
