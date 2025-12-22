@@ -125,7 +125,6 @@ app.post('/api/payment/create', async (req, res) => {
     try {
         const { orderId, amount, email, itemDesc } = req.body;
 
-        // 建立交易參數
         const timeStamp = Math.round(new Date().getTime() / 1000);
         const tradeInfo = {
             MerchantID: NEWEB_OPTS.MerchantID,
@@ -138,7 +137,11 @@ app.post('/api/payment/create', async (req, res) => {
             Email: email || '',       // 付款人 Email
             NotifyURL: `${BACKEND_URL}/api/payment/notify`, // 幕後通知 (更新資料庫用)
             ReturnURL: `${BACKEND_URL}/api/payment/return`, // 支付完成返回 (導回前台用)
-            LoginType: 0, // 不需登入藍新會員
+            
+            // 當消費者在藍新頁面點擊「返回商店」或「交易失敗」時，會導向這裡
+            ClientBackURL: FRONTEND_URL, 
+            
+            LoginType: 0,
         };
 
         // 加密
