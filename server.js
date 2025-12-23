@@ -123,7 +123,15 @@ app.put('/api/orders/:id', async (req, res) => {
 // ★ 4. 產生藍新付款參數 (供前端呼叫)
 app.post('/api/payment/create', async (req, res) => {
     try {
-        const { orderId, amount, email, itemDesc } = req.body;
+        //接收 lang 參數
+        const { orderId, amount, email, itemDesc, lang } = req.body;
+
+        //轉換語言格式 (藍新只接受: 'zh-tw', 'en', 'jp')
+        // 預設為 zh-tw
+        let newebLang = 'zh-tw'; 
+        if (lang === 'en') {
+            newebLang = 'en';
+        }
 
         const timeStamp = Math.round(new Date().getTime() / 1000);
         const tradeInfo = {
@@ -142,6 +150,9 @@ app.post('/api/payment/create', async (req, res) => {
             ClientBackURL: FRONTEND_URL, 
             
             LoginType: 0,
+
+            OrderComment: 'LeLe Candles',
+            LangType: newebLang,
         };
 
         // 加密
