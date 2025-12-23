@@ -153,6 +153,21 @@ app.post('/api/payment/create', async (req, res) => {
 
             OrderComment: 'LeLe Candles',
             LangType: newebLang,
+
+
+	    MerchantOrderNo: orderId,
+    
+            // ★★★ 必須加入這幾行來解決收單行錯誤 ★★★
+            CREDIT: 1,      // 開啟信用卡
+            VACC: 1,        // 開啟 ATM
+            CVS: 1,         // 開啟超商代碼
+    
+            InstFlag: 0,    // ★ 關鍵：關閉分期付款 (解決收單行錯誤)
+            UNIONPAY: 0,    // ★ 關鍵：關閉銀聯卡
+            CreditRed: 0,   // 關閉紅利
+            GOOGLEPAY: 0,   // 關閉 Google Pay
+            SAMSUNGPAY: 0,  // 關閉 Samsung Pay
+            LINEPAY: 0,     // 關閉 LINE Pay
         };
 
         // 加密
