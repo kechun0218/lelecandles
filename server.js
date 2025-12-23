@@ -12,8 +12,8 @@ const FRONTEND_URL = "https://lelecandles-web.vercel.app/";
 const BACKEND_URL = "https://lelecandles.onrender.com"; 
 
 // --- ★ 2. 郵件設定 (請填入您的資訊) ---
-const EMAIL_USER = 'chiulele614@gmail.com'; 
-const EMAIL_PASS = 'krhopumeudshilrm'; // 請去 Google 帳戶 > 安全性 > 應用程式密碼 申請
+const EMAIL_USER = '9ea26f001@smtp-brevo.com'; 
+const EMAIL_PASS = 'xsmtpsib-459cffa271e3dc6ad065e378baa56a1f30432843a7616fc523e0e432bd13a99a-yDGHEkIJEMJoTX6c'; // 請去 Google 帳戶 > 安全性 > 應用程式密碼 申請
 
 // 建立發信器
 const transporter = nodemailer.createTransport({
