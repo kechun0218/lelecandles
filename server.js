@@ -13,15 +13,24 @@ const BACKEND_URL = "https://lelecandles.onrender.com";
 
 // --- ★ 2. 郵件設定 (請填入您的資訊) ---
 const EMAIL_USER = 'chiulele614@gmail.com'; 
-const EMAIL_PASS = 'tqlevswkjvpzzmtx'; // 請去 Google 帳戶 > 安全性 > 應用程式密碼 申請
+const EMAIL_PASS = 'krhopumeudshilrm'; // 請去 Google 帳戶 > 安全性 > 應用程式密碼 申請
 
 // 建立發信器
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com', // 明確指定主機
+    port: 587,              // 改用 587 Port (比 465 更不易被擋)
+    secure: false,          // 587 Port 必須設為 false (會在連線後升級加密)
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
-    }
+    },
+    tls: {
+        ciphers: 'SSLv3',          // 增加相容性
+        rejectUnauthorized: false  // 避免憑證問題導致連線失敗
+    },
+    connectionTimeout: 10000, // 設定 10 秒超時，避免無限空轉
+    greetingTimeout: 5000,
+    socketTimeout: 10000
 });
 
 // --- 藍新金流測試參數 ---
