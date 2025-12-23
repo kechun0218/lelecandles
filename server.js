@@ -17,15 +17,18 @@ const EMAIL_PASS = 'krhopumeudshilrm'; // 請去 Google 帳戶 > 安全性 > 應
 
 // 建立發信器
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // 改回 service: 'gmail'，它會自動處理大部分設定
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // Port 587 必須設為 false (會在連線後自動升級加密)
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     },
-    // ★ 關鍵設定：強制使用 IPv4，解決 Render 連線逾時問題
-    family: 4, 
-    // 開啟 Log 以便觀察詳細連線過程
-    logger: true,
+    tls: {
+        rejectUnauthorized: false // 忽略憑證問題
+    },
+    family: 4, // 強制使用 IPv4 (解決 Render 常見的 DNS 問題)
+    logger: true, // 保持 Log 開啟以便除錯
     debug: true
 });
 
