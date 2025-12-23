@@ -17,18 +17,15 @@ const EMAIL_PASS = 'krhopumeudshilrm'; // 請去 Google 帳戶 > 安全性 > 應
 
 // 建立發信器
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // 明確指定主機
-    port: 587,              // 改用 587 Port (比 465 更不易被擋)
-    secure: false,          // 587 Port 必須設為 false (會在連線後升級加密)
+    host: 'smtp.gmail.com',
+    port: 465,              // 改用 465
+    secure: true,           // 465 必須設為 true (使用 SSL)
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     },
-    tls: {
-        ciphers: 'SSLv3',          // 增加相容性
-        rejectUnauthorized: false  // 避免憑證問題導致連線失敗
-    },
-    connectionTimeout: 10000, // 設定 10 秒超時，避免無限空轉
+    // 增加連線逾時設定
+    connectionTimeout: 10000, 
     greetingTimeout: 5000,
     socketTimeout: 10000
 });
@@ -275,11 +272,11 @@ app.post('/api/payment/notify', async (req, res) => {
             
             if (order && !order.status.paid) {
                 await Order.findOneAndUpdate({ id: orderId }, { 'status.paid': true });
-                
-                // ★ 這裡也要傳入訂單語言
+    
+                // ★★★ 加上 await，等待發信完成後再印 Log
                 const orderLang = order.lang || 'zh';
-                sendStatusEmail(order.customer.email, orderId, 'PAID', "", orderLang);
-                
+                await sendStatusEmail(order.customer.email, orderId, 'PAID', "", orderLang);
+    
                 console.log(`Order ${orderId} updated to PAID and Email sent.`);
             }
         }
