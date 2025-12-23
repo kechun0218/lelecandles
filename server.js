@@ -154,8 +154,6 @@ app.post('/api/payment/create', async (req, res) => {
             OrderComment: 'LeLe Candles',
             LangType: newebLang,
 
-
-	    MerchantOrderNo: orderId,
     
             // ★★★ 必須加入這幾行來解決收單行錯誤 ★★★
             CREDIT: 1,      // 開啟信用卡
