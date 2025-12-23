@@ -1,15 +1,28 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const crypto = require('crypto'); // ★ 新增：用於加密
+const crypto = require('crypto');
+// ★ 1. 引入 nodemailer
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ★ 設定：請將此網址改為您 Vercel 前端的網址，付款完成後會導回這裡
 const FRONTEND_URL = "https://lelecandles-web.vercel.app/"; 
-// ★ 設定：後端網址 (Render 的網址)，用於接收藍新通知
 const BACKEND_URL = "https://lelecandles.onrender.com"; 
+
+// --- ★ 2. 郵件設定 (請填入您的資訊) ---
+const EMAIL_USER = 'chiulele614@gmail.com'; 
+const EMAIL_PASS = 'tqlevswkjvpzzmtx'; // 請去 Google 帳戶 > 安全性 > 應用程式密碼 申請
+
+// 建立發信器
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
+    }
+});
 
 // --- 藍新金流測試參數 ---
 const NEWEB_OPTS = {
@@ -18,16 +31,13 @@ const NEWEB_OPTS = {
     HashIV: 'CPx24loDHvldIgkP',
     Version: '2.0',
     RespondType: 'JSON',
-    PayGateWay: 'https://ccore.newebpay.com/MPG/mpg_gateway' // 測試環境網址
+    PayGateWay: 'https://ccore.newebpay.com/MPG/mpg_gateway'
 };
 
-// --- 中介軟體設定 ---
 app.use(cors());
 app.use(express.json());
-// ★ 新增：為了接收藍新回傳的 application/x-www-form-urlencoded 資料
 app.use(express.urlencoded({ extended: true }));
 
-// --- 資料庫連線 ---
 const MONGO_URI = 'mongodb+srv://kechunlin50_db_user:1oTBMgKskurDQxSL@lele-server.l67p3cy.mongodb.net/?appName=lele-server';
 
 const orderSchema = new mongoose.Schema({
@@ -47,12 +57,13 @@ const orderSchema = new mongoose.Schema({
         produced: { type: Boolean, default: false },
         shipped: { type: Boolean, default: false }
     },
-    trackingNumber: { type: String, default: "" }
+    trackingNumber: { type: String, default: "" },
+    lang: { type: String, default: "zh" } // ★ 新增：儲存訂單語言 (預設中文)
 });
 
 const Order = mongoose.model('Order', orderSchema);
 
-// --- 藍新金流 加密輔助函式 ---
+// --- 藍新金流 加密輔助函式 (保持不變) ---
 function genDataChain(TradeInfo) {
     let results = [];
     for (let kv of Object.entries(TradeInfo)) {
@@ -78,9 +89,58 @@ function createMpgAesDecrypt(TradeInfo) {
     decrypt.setAutoPadding(false);
     const text = decrypt.update(TradeInfo, "hex", "utf8");
     const plainText = text + decrypt.final("utf8");
-    // 去除 Padding 字元
     const result = plainText.replace(/[\x00-\x20]+/g, "");
     return JSON.parse(result);
+}
+
+
+const EMAIL_TEMPLATES = {
+    zh: {
+        PAID_SUBJECT: "[LeLe Candles] 訂單 {id} 付款確認通知",
+        PAID_TEXT: "親愛的顧客您好，\n\n我們已收到您的訂單款項 ({id})。\n我們將盡快為您製作並安排出貨。\n\n感謝您的支持！",
+        SHIPPED_SUBJECT: "[LeLe Candles] 訂單 {id} 出貨通知",
+        SHIPPED_TEXT: "親愛的顧客您好，\n\n您的訂單 ({id}) 已經出貨了！\n物流追蹤單號：{tracking}\n\n期待香氛能溫暖您的生活。"
+    },
+    en: {
+        PAID_SUBJECT: "[LeLe Candles] Payment Confirmed: Order {id}",
+        PAID_TEXT: "Dear Customer,\n\nWe have received your payment for order ({id}).\nWe will proceed with production and shipment as soon as possible.\n\nThank you for your support!",
+        SHIPPED_SUBJECT: "[LeLe Candles] Order Shipped: {id}",
+        SHIPPED_TEXT: "Dear Customer,\n\nYour order ({id}) has been shipped!\nTracking Number: {tracking}\n\nWe hope our scents bring warmth to your life."
+    }
+};
+
+
+
+// --- ★ 3. 發信輔助函式 ---
+async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = "zh") {
+    if (!toEmail || !toEmail.includes('@')) return;
+
+    // 確保語言代碼有效，否則預設為 zh
+    const safeLang = (lang === 'en') ? 'en' : 'zh';
+    const templates = EMAIL_TEMPLATES[safeLang];
+
+    let subject = "";
+    let text = "";
+
+    if (type === 'PAID') {
+        subject = templates.PAID_SUBJECT.replace('{id}', orderId);
+        text = templates.PAID_TEXT.replace('{id}', orderId);
+    } else if (type === 'SHIPPED') {
+        subject = templates.SHIPPED_SUBJECT.replace('{id}', orderId);
+        text = templates.SHIPPED_TEXT.replace('{id}', orderId).replace('{tracking}', trackingNum);
+    }
+
+    try {
+        await transporter.sendMail({
+            from: `"LeLe Candles" <${EMAIL_USER}>`,
+            to: toEmail,
+            subject: subject,
+            text: text
+        });
+        console.log(`Email sent to ${toEmail} (${type}) in ${safeLang}`);
+    } catch (err) {
+        console.error("Email send failed:", err);
+    }
 }
 
 // --- API 路由 ---
@@ -106,28 +166,44 @@ app.post('/api/orders', async (req, res) => {
     }
 });
 
-// 3. 更新訂單
+// 3. 更新訂單 (★ 修改處：加入發信判斷邏輯)
 app.put('/api/orders/:id', async (req, res) => {
     try {
+        const oldOrder = await Order.findOne({ id: req.params.id });
+        if (!oldOrder) return res.status(404).json({ message: "Order not found" });
+
         const updatedOrder = await Order.findOneAndUpdate(
             { id: req.params.id }, 
             req.body, 
             { new: true }
         );
+
+        const email = updatedOrder.customer.email;
+        const newStatus = updatedOrder.status;
+        const orderLang = updatedOrder.lang || 'zh'; // ★ 取得該訂單的語言設定
+
+        // 狀態變化判斷
+        if (!oldOrder.status.paid && newStatus.paid) {
+            // ★ 傳入 orderLang
+            sendStatusEmail(email, updatedOrder.id, 'PAID', "", orderLang);
+        }
+
+        if (!oldOrder.status.shipped && newStatus.shipped) {
+            // ★ 傳入 orderLang
+            sendStatusEmail(email, updatedOrder.id, 'SHIPPED', updatedOrder.trackingNumber, orderLang);
+        }
+
         res.json(updatedOrder);
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
 });
 
-// ★ 4. 產生藍新付款參數 (供前端呼叫)
+// 4. 產生藍新付款參數
 app.post('/api/payment/create', async (req, res) => {
     try {
-        //接收 lang 參數
         const { orderId, amount, email, itemDesc, lang } = req.body;
 
-        //轉換語言格式 (藍新只接受: 'zh-tw', 'en', 'jp')
-        // 預設為 zh-tw
         let newebLang = 'zh-tw'; 
         if (lang === 'en') {
             newebLang = 'en';
@@ -139,36 +215,22 @@ app.post('/api/payment/create', async (req, res) => {
             RespondType: 'JSON',
             TimeStamp: timeStamp,
             Version: NEWEB_OPTS.Version,
-            MerchantOrderNo: orderId, // 訂單編號
-            Amt: parseInt(amount),    // 金額
-            ItemDesc: itemDesc || 'LeLe Candles Products', // 商品描述
-            Email: email || '',       // 付款人 Email
-            NotifyURL: `${BACKEND_URL}/api/payment/notify`, // 幕後通知 (更新資料庫用)
-            ReturnURL: `${BACKEND_URL}/api/payment/return`, // 支付完成返回 (導回前台用)
-            
-            // 當消費者在藍新頁面點擊「返回商店」或「交易失敗」時，會導向這裡
-            ClientBackURL: FRONTEND_URL, 
-            
+            MerchantOrderNo: orderId,
+            Amt: parseInt(amount),
+            ItemDesc: itemDesc || 'LeLe Candles Products',
+            Email: email || '',
+            NotifyURL: `${BACKEND_URL}/api/payment/notify`,
+            ReturnURL: `${BACKEND_URL}/api/payment/return`,
+            ClientBackURL: FRONTEND_URL,
             LoginType: 0,
-
             OrderComment: 'LeLe Candles',
             LangType: newebLang,
-
     
-            // ★★★ 必須加入這幾行來解決收單行錯誤 ★★★
-            CREDIT: 1,      // 開啟信用卡
-            VACC: 1,        // 開啟 ATM
-            CVS: 1,         // 開啟超商代碼
-    
-            InstFlag: 0,    // ★ 關鍵：關閉分期付款 (解決收單行錯誤)
-            UNIONPAY: 0,    // ★ 關鍵：關閉銀聯卡
-            CreditRed: 0,   // 關閉紅利
-            GOOGLEPAY: 0,   // 關閉 Google Pay
-            SAMSUNGPAY: 0,  // 關閉 Samsung Pay
-            LINEPAY: 0,     // 關閉 LINE Pay
+            // ★ 保留您之前設定的參數，避免報錯
+            CREDIT: 1, VACC: 1, CVS: 1,
+            InstFlag: 0, UNIONPAY: 0, CreditRed: 0, GOOGLEPAY: 0, SAMSUNGPAY: 0, LINEPAY: 0,
         };
 
-        // 加密
         const aesEncrypt = createMpgAesEncrypt(tradeInfo);
         const shaEncrypt = createMpgShaEncrypt(aesEncrypt);
 
@@ -189,34 +251,29 @@ app.post('/api/payment/create', async (req, res) => {
     }
 });
 
-// ★ 5. 接收藍新 Notify (幕後 Server-to-Server 通知)
-// 藍新會對此網址 POST 資料，我們在此更新資料庫
+// 5. 接收藍新 Notify (★ 修改處：藍新付款成功時也發信)
 app.post('/api/payment/notify', async (req, res) => {
     try {
         const { TradeInfo } = req.body;
         if (!TradeInfo) return res.status(400).send('No TradeInfo');
 
-        // 解密交易內容
         const data = createMpgAesDecrypt(TradeInfo);
         console.log('Payment Notify:', data);
 
-        // 確認交易成功
         if (data.Status === 'SUCCESS') {
             const orderId = data.Result.MerchantOrderNo;
+            const order = await Order.findOne({ id: orderId });
             
-            // 更新資料庫狀態為已付款
-            await Order.findOneAndUpdate(
-                { id: orderId },
-                { 
-                    'status.paid': true,
-                    // 也可以選擇性把藍新交易序號存入 remarks 或其他欄位
-                    // remarks: `[藍新付款成功] ${data.Result.TradeNo}` 
-                }
-            );
-            console.log(`Order ${orderId} updated to PAID.`);
+            if (order && !order.status.paid) {
+                await Order.findOneAndUpdate({ id: orderId }, { 'status.paid': true });
+                
+                // ★ 這裡也要傳入訂單語言
+                const orderLang = order.lang || 'zh';
+                sendStatusEmail(order.customer.email, orderId, 'PAID', "", orderLang);
+                
+                console.log(`Order ${orderId} updated to PAID and Email sent.`);
+            }
         }
-
-        // 回應藍新收到通知
         res.status(200).send('OK');
     } catch (err) {
         console.error('Notify Error:', err);
@@ -224,31 +281,26 @@ app.post('/api/payment/notify', async (req, res) => {
     }
 });
 
-// ★ 6. 接收藍新 Return (使用者瀏覽器導回)
+// 6. 接收藍新 Return
 app.post('/api/payment/return', async (req, res) => {
     try {
         const { TradeInfo } = req.body;
-        // 解密交易內容
         const data = createMpgAesDecrypt(TradeInfo);
         
-        console.log('Return Data:', data); // 建議保留 log 以便除錯
+        console.log('Return Data:', data);
 
         const orderId = data.Result.MerchantOrderNo;
         
-        // ★★★ 關鍵修改：判斷交易狀態 ★★★
         if (data.Status === 'SUCCESS') {
-            // 成功：導向成功參數
             res.redirect(`${FRONTEND_URL}?payment=success&order_id=${orderId}`);
         } else {
-            // 失敗：導向失敗參數，並將錯誤訊息 (Message) 編碼後帶回
-            // data.Message 通常包含 "末三碼格式錯誤" 等具體原因
             const errorMsg = encodeURIComponent(data.Message || '交易失敗');
             res.redirect(`${FRONTEND_URL}?payment=fail&order_id=${orderId}&msg=${errorMsg}`);
         }
         
     } catch (err) {
         console.error('Return Error:', err);
-        res.redirect(`${FRONTEND_URL}?payment=error`); // 發生程式錯誤
+        res.redirect(`${FRONTEND_URL}?payment=error`);
     }
 });
 
