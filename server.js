@@ -17,17 +17,16 @@ const EMAIL_PASS = 'krhopumeudshilrm'; // 請去 Google 帳戶 > 安全性 > 應
 
 // 建立發信器
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,              // 改用 465
-    secure: true,           // 465 必須設為 true (使用 SSL)
+    service: 'gmail', // 改回 service: 'gmail'，它會自動處理大部分設定
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     },
-    // 增加連線逾時設定
-    connectionTimeout: 10000, 
-    greetingTimeout: 5000,
-    socketTimeout: 10000
+    // ★ 關鍵設定：強制使用 IPv4，解決 Render 連線逾時問題
+    family: 4, 
+    // 開啟 Log 以便觀察詳細連線過程
+    logger: true,
+    debug: true
 });
 
 // --- 藍新金流測試參數 ---
@@ -272,12 +271,19 @@ app.post('/api/payment/notify', async (req, res) => {
             
             if (order && !order.status.paid) {
                 await Order.findOneAndUpdate({ id: orderId }, { 'status.paid': true });
-    
-                // ★★★ 加上 await，等待發信完成後再印 Log
+                
                 const orderLang = order.lang || 'zh';
-                await sendStatusEmail(order.customer.email, orderId, 'PAID', "", orderLang);
-    
-                console.log(`Order ${orderId} updated to PAID and Email sent.`);
+                
+                // ★★★ 這裡一定要加 await，並包在 try-catch 中避免發信失敗導致當機 ★★★
+                try {
+                    console.log('Attempting to send email...');
+                    await sendStatusEmail(order.customer.email, orderId, 'PAID', "", orderLang);
+                    console.log(`Email sent successfully to ${order.customer.email}`);
+                } catch (emailErr) {
+                    console.error('Failed to send email but order updated:', emailErr);
+                }
+                
+                console.log(`Order ${orderId} updated to PAID.`);
             }
         }
         res.status(200).send('OK');
