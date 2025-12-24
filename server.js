@@ -130,7 +130,7 @@ async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = 
         const response = await resend.emails.send({
             // ★★★ 注意：這裡的 from 必須跟您在 Resend 驗證的網域完全一致 ★★★
             // 如果您驗證的是 send.lele-candles.tw，這裡就必須是 @send.lele-candles.tw
-            from: 'LeLe Candles <order@send.lele-candles.tw>', 
+            from: 'LeLe Candles <order@lele-candles.tw>', 
             to: [toEmail],
             subject: subject,
             text: text
