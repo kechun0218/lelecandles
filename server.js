@@ -18,13 +18,19 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 
 // 建立發信器
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // 直接使用 service: 'gmail' 設定會更簡單
+    host: 'smtp.gmail.com',
+    port: 465, // 改用 465 (SSL)
+    secure: true, // Port 465 必須設為 true
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     },
-    logger: true, // 顯示詳細日誌
-    debug: true   // 顯示除錯訊息
+    // ★★★ 關鍵修正：強制使用 IPv4，解決 Render 連線超時問題 ★★★
+    family: 4, 
+    // 設定連線超時時間 (例如 10秒)，避免前端卡住太久
+    connectionTimeout: 10000, 
+    logger: true,
+    debug: true
 });
 
 transporter.verify(function (error, success) {
