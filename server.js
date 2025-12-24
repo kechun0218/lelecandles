@@ -8,7 +8,7 @@ const { Resend } = require('resend');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const FRONTEND_URL = "https://lelecandles-web.vercel.app/"; 
+const FRONTEND_URL = "https://lele-candles.tw"; 
 const BACKEND_URL = "https://lelecandles.onrender.com"; 
 
 // --- ★ 2. 郵件設定 (請填入您的資訊) ---
@@ -108,49 +108,96 @@ const EMAIL_TEMPLATES = {
 
 // --- ★ 3. 發信輔助函式 ---
 async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = "zh") {
-    // 若沒有網域，Resend 測試模式只能寄給「您自己的帳號信箱」
-    // 正式上線需綁定網域才能寄給任意客戶
     
     const safeLang = (lang === 'en') ? 'en' : 'zh';
     const templates = EMAIL_TEMPLATES[safeLang];
 
     let subject = "";
-    let text = "";
+    let textContent = ""; // 純文字內容 (給不支援 HTML 的舊信箱)
+    let title = "";       // HTML 信件內的大標題
 
     if (type === 'PAID') {
         subject = templates.PAID_SUBJECT.replace('{id}', orderId);
-        text = templates.PAID_TEXT.replace('{id}', orderId);
+        textContent = templates.PAID_TEXT.replace('{id}', orderId);
+        title = (safeLang === 'en') ? 'Payment Confirmed' : '付款確認通知';
     } else if (type === 'SHIPPED') {
         subject = templates.SHIPPED_SUBJECT.replace('{id}', orderId);
-        text = templates.SHIPPED_TEXT.replace('{id}', orderId).replace('{tracking}', trackingNum);
+        textContent = templates.SHIPPED_TEXT.replace('{id}', orderId).replace('{tracking}', trackingNum);
+        title = (safeLang === 'en') ? 'Order Shipped' : '商品已出貨';
     }
 
+    // ★★★ 設定 Logo 圖片網址 (請確認此網址是公開可讀取的) ★★★
+    // 假設您已將圖片放在前端的 public 資料夾中
+    const LOGO_URL = "https://lele-candles.tw/logo.jpg"; 
+
+    // ★★★ 製作 HTML Email 內容 ★★★
+    // 使用簡單的 CSS 讓信件看起來有質感 (品牌色 #5D4037)
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body { font-family: 'Helvetica', 'Arial', sans-serif; background-color: #F9F7F2; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 4px; border-top: 5px solid #C5A065; }
+            .logo { text-align: center; margin-bottom: 30px; }
+            .logo img { width: 150px; height: auto; }
+            .title { color: #5D4037; font-size: 24px; font-weight: bold; text-align: center; margin-bottom: 20px; font-family: serif; }
+            .content { color: #5D4037; font-size: 16px; line-height: 1.6; white-space: pre-wrap; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; font-size: 12px; color: #999; }
+            .btn { display: inline-block; background-color: #5D4037; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
+        </style>
+    </head>
+    <body>
+        <div style="background-color: #F9F7F2; padding: 40px 0;">
+            <div class="container">
+                <!-- 品牌 Logo -->
+                <div class="logo">
+                    <img src="${LOGO_URL}" alt="LeLe Candles" width="150" style="display: block; margin: 0 auto;">
+                </div>
+                
+                <!-- 標題 -->
+                <div class="title">${title}</div>
+                
+                <!-- 內容 (將換行符號 \n 轉為 <br>) -->
+                <div class="content">
+                    ${textContent.replace(/\n/g, '<br>')}
+                </div>
+
+                <!-- 按鈕 (連結回網站) -->
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="${FRONTEND_URL}" class="btn" style="color: #ffffff;">Return to Store</a>
+                </div>
+
+                <!-- 頁尾 -->
+                <div class="footer">
+                    &copy; 2025 LeLe Candles. Light that illuminates the night.
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
     try {
-        // 1. 執行發信，並將結果存入 response
         const response = await resend.emails.send({
-            // ★★★ 注意：這裡的 from 必須跟您在 Resend 驗證的網域完全一致 ★★★
-            // 如果您驗證的是 send.lele-candles.tw，這裡就必須是 @send.lele-candles.tw
             from: 'LeLe Candles <order@lele-candles.tw>', 
             to: [toEmail],
             subject: subject,
-            text: text
+            text: textContent, // 為了相容性，同時保留純文字版本
+            html: htmlContent  // ★ 加入 HTML 版本
         });
 
-        // 2. ★★★ 關鍵修正：檢查是否有 error ★★★
         if (response.error) {
             console.error('★ Resend 發信失敗 (API Error):', response.error);
             return; 
         }
 
-        // 3. 成功
         console.log(`★ Email sent successfully via Resend. ID: ${response.data.id}`);
 
     } catch (err) {
-        // 這裡只會抓到網路斷線等嚴重錯誤
         console.error("★ System Error:", err);
     }
 }
-
 // --- API 路由 ---
 
 // 1. 獲取所有訂單
