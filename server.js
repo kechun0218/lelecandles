@@ -126,16 +126,28 @@ async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = 
     }
 
     try {
-        const data = await resend.emails.send({
-            from: 'LeLe Candles <onboarding@resend.dev>', // 測試時必須用這個，正式時改為您的網域 Email
+        // 1. 執行發信，並將結果存入 response
+        const response = await resend.emails.send({
+            // ★★★ 注意：這裡的 from 必須跟您在 Resend 驗證的網域完全一致 ★★★
+            // 如果您驗證的是 send.lele-candles.tw，這裡就必須是 @send.lele-candles.tw
+            from: 'LeLe Candles <order@send.lele-candles.tw>', 
             to: [toEmail],
             subject: subject,
             text: text
-            // html: `<p>${text.replace(/\n/g, '<br>')}</p>` // 若想支援 HTML 可加這行
         });
-        console.log(`★ Email sent successfully via Resend. ID: ${data.id}`);
+
+        // 2. ★★★ 關鍵修正：檢查是否有 error ★★★
+        if (response.error) {
+            console.error('★ Resend 發信失敗 (API Error):', response.error);
+            return; 
+        }
+
+        // 3. 成功
+        console.log(`★ Email sent successfully via Resend. ID: ${response.data.id}`);
+
     } catch (err) {
-        console.error("★ Email send failed:", err);
+        // 這裡只會抓到網路斷線等嚴重錯誤
+        console.error("★ System Error:", err);
     }
 }
 
