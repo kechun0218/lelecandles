@@ -12,25 +12,29 @@ const FRONTEND_URL = "https://lelecandles-web.vercel.app/";
 const BACKEND_URL = "https://lelecandles.onrender.com"; 
 
 // --- ★ 2. 郵件設定 (請填入您的資訊) ---
-const EMAIL_USER = '9ea26f001@smtp-brevo.com'; 
-const EMAIL_PASS = 'xsmtpsib-459cffa271e3dc6ad065e378baa56a1f30432843a7616fc523e0e432bd13a99a-yDGHEkIJEMJoTX6c'; // 請去 Google 帳戶 > 安全性 > 應用程式密碼 申請
+
+const EMAIL_USER = process.env.EMAIL_USER; 
+const EMAIL_PASS = process.env.EMAIL_PASS;
 
 // 建立發信器
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // Port 587 必須設為 false (會在連線後自動升級加密)
+    service: 'gmail', // 直接使用 service: 'gmail' 設定會更簡單
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     },
-    tls: {
-        rejectUnauthorized: false // 忽略憑證問題
-    },
-    family: 4, // 強制使用 IPv4 (解決 Render 常見的 DNS 問題)
-    logger: true, // 保持 Log 開啟以便除錯
-    debug: true
+    logger: true, // 顯示詳細日誌
+    debug: true   // 顯示除錯訊息
 });
+
+transporter.verify(function (error, success) {
+    if (error) {
+        console.log('★ SMTP 連線失敗:', error);
+    } else {
+        console.log('★ SMTP Server is ready to take our messages');
+    }
+});
+
 
 // --- 藍新金流測試參數 ---
 const NEWEB_OPTS = {
@@ -121,14 +125,14 @@ const EMAIL_TEMPLATES = {
 
 // --- ★ 3. 發信輔助函式 ---
 async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = "zh") {
-    if (!toEmail || !toEmail.includes('@')) return;
+    if (!toEmail || !toEmail.includes('@')) {
+        console.log(`Skipping email: Invalid address ${toEmail}`);
+        return;
+    }
 
-    // 確保語言代碼有效，否則預設為 zh
     const safeLang = (lang === 'en') ? 'en' : 'zh';
     const templates = EMAIL_TEMPLATES[safeLang];
-
-    let subject = "";
-    let text = "";
+    let subject = "", text = "";
 
     if (type === 'PAID') {
         subject = templates.PAID_SUBJECT.replace('{id}', orderId);
@@ -139,15 +143,15 @@ async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = 
     }
 
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"LeLe Candles" <${EMAIL_USER}>`,
             to: toEmail,
             subject: subject,
             text: text
         });
-        console.log(`Email sent to ${toEmail} (${type}) in ${safeLang}`);
+        console.log(`★ Email sent successfully to ${toEmail}. MessageID: ${info.messageId}`);
     } catch (err) {
-        console.error("Email send failed:", err);
+        console.error("★ Email send failed:", err);
     }
 }
 
@@ -177,9 +181,11 @@ app.post('/api/orders', async (req, res) => {
 // 3. 更新訂單 (★ 修改處：加入發信判斷邏輯)
 app.put('/api/orders/:id', async (req, res) => {
     try {
+        // 1. 先找舊訂單狀態
         const oldOrder = await Order.findOne({ id: req.params.id });
         if (!oldOrder) return res.status(404).json({ message: "Order not found" });
 
+        // 2. 更新訂單
         const updatedOrder = await Order.findOneAndUpdate(
             { id: req.params.id }, 
             req.body, 
@@ -188,21 +194,24 @@ app.put('/api/orders/:id', async (req, res) => {
 
         const email = updatedOrder.customer.email;
         const newStatus = updatedOrder.status;
-        const orderLang = updatedOrder.lang || 'zh'; // ★ 取得該訂單的語言設定
+        const orderLang = updatedOrder.lang || 'zh';
 
-        // 狀態變化判斷
+        // 3. 檢查狀態變化並發信 (加上 await)
+        // 情況 A: 變成「已付款」
         if (!oldOrder.status.paid && newStatus.paid) {
-            // ★ 傳入 orderLang
-            sendStatusEmail(email, updatedOrder.id, 'PAID', "", orderLang);
+            console.log(`Triggering PAID email for ${updatedOrder.id}`);
+            await sendStatusEmail(email, updatedOrder.id, 'PAID', "", orderLang);
         }
 
+        // 情況 B: 變成「已出貨」
         if (!oldOrder.status.shipped && newStatus.shipped) {
-            // ★ 傳入 orderLang
-            sendStatusEmail(email, updatedOrder.id, 'SHIPPED', updatedOrder.trackingNumber, orderLang);
+            console.log(`Triggering SHIPPED email for ${updatedOrder.id}`);
+            await sendStatusEmail(email, updatedOrder.id, 'SHIPPED', updatedOrder.trackingNumber, orderLang);
         }
 
         res.json(updatedOrder);
     } catch (err) {
+        console.error("Update Error:", err);
         res.status(400).json({ message: err.message });
     }
 });
