@@ -200,6 +200,26 @@ async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = 
 }
 // --- API 路由 ---
 
+
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+    
+    // 讀取 Render 設定的環境變數
+    // 請確保在 Render Dashboard 裡有設定 ADMIN_USER 和 ADMIN_PASS
+    const adminUser = process.env.ADMIN_USER;
+    const adminPass = process.env.ADMIN_PASS;
+
+    if (username === adminUser && password === adminPass) {
+        // 登入成功
+        res.status(200).json({ success: true, message: 'Login successful' });
+    } else {
+        // 登入失敗
+        res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+});
+
+
+
 // 1. 獲取所有訂單
 app.get('/api/orders', async (req, res) => {
     try {
@@ -209,6 +229,7 @@ app.get('/api/orders', async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 });
+
 
 // 2. 新增訂單
 app.post('/api/orders', async (req, res) => {
