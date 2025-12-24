@@ -2,8 +2,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const crypto = require('crypto');
-// ★ 1. 引入 nodemailer
-const nodemailer = require('nodemailer');
+
+const { Resend } = require('resend'); 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,22 +16,7 @@ const BACKEND_URL = "https://lelecandles.onrender.com";
 const EMAIL_USER = process.env.EMAIL_USER; 
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
-// 建立發信器
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465, // 改用 465 (SSL)
-    secure: true, // Port 465 必須設為 true
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    },
-    // ★★★ 關鍵修正：強制使用 IPv4，解決 Render 連線超時問題 ★★★
-    family: 4, 
-    // 設定連線超時時間 (例如 10秒)，避免前端卡住太久
-    connectionTimeout: 10000, 
-    logger: true,
-    debug: true
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 transporter.verify(function (error, success) {
     if (error) {
@@ -131,14 +116,14 @@ const EMAIL_TEMPLATES = {
 
 // --- ★ 3. 發信輔助函式 ---
 async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = "zh") {
-    if (!toEmail || !toEmail.includes('@')) {
-        console.log(`Skipping email: Invalid address ${toEmail}`);
-        return;
-    }
-
+    // 若沒有網域，Resend 測試模式只能寄給「您自己的帳號信箱」
+    // 正式上線需綁定網域才能寄給任意客戶
+    
     const safeLang = (lang === 'en') ? 'en' : 'zh';
     const templates = EMAIL_TEMPLATES[safeLang];
-    let subject = "", text = "";
+
+    let subject = "";
+    let text = "";
 
     if (type === 'PAID') {
         subject = templates.PAID_SUBJECT.replace('{id}', orderId);
@@ -149,13 +134,14 @@ async function sendStatusEmail(toEmail, orderId, type, trackingNum = "", lang = 
     }
 
     try {
-        const info = await transporter.sendMail({
-            from: `"LeLe Candles" <${EMAIL_USER}>`,
-            to: toEmail,
+        const data = await resend.emails.send({
+            from: 'LeLe Candles <onboarding@resend.dev>', // 測試時必須用這個，正式時改為您的網域 Email
+            to: [toEmail],
             subject: subject,
             text: text
+            // html: `<p>${text.replace(/\n/g, '<br>')}</p>` // 若想支援 HTML 可加這行
         });
-        console.log(`★ Email sent successfully to ${toEmail}. MessageID: ${info.messageId}`);
+        console.log(`★ Email sent successfully via Resend. ID: ${data.id}`);
     } catch (err) {
         console.error("★ Email send failed:", err);
     }
