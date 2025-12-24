@@ -18,14 +18,6 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-transporter.verify(function (error, success) {
-    if (error) {
-        console.log('★ SMTP 連線失敗:', error);
-    } else {
-        console.log('★ SMTP Server is ready to take our messages');
-    }
-});
-
 
 // --- 藍新金流測試參數 ---
 const NEWEB_OPTS = {
